@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 
 /* ═══════════════════════════════════════════════════════════
    PILLAR PERFORMANCE — CONSTANTS
@@ -102,12 +102,18 @@ function useAppStorage() {
     try {
       const raw = localStorage.getItem("pillar_performance_v1");
       if(raw) setState({...DEFAULT_STATE,...JSON.parse(raw)});
-    } catch {}
+    } catch(e) {
+      console.warn("Pillar: storage corrupted, resetting.",e);
+      try { localStorage.removeItem("pillar_performance_v1"); } catch {}
+      setState(DEFAULT_STATE);
+    }
     setLoaded(true);
   },[]);
 
   const persist = useCallback((s)=>{
-    try { localStorage.setItem("pillar_performance_v1",JSON.stringify(s)); } catch {}
+    try { localStorage.setItem("pillar_performance_v1",JSON.stringify(s)); } catch(e) {
+      console.warn("Pillar: could not persist.",e);
+    }
   },[]);
 
   const update = useCallback((patch)=>{
@@ -829,36 +835,134 @@ function DayScreen({iso,programStart,entries,onUpdateEntry,exHistory,onUpdateHis
       </div>
 
       <div style={{padding:"18px 20px"}}>
-        {/* Habit boxes */}
-        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:18}}>
+
+        {/* ── DAILY SCORE ── */}
+        {(()=>{
+          const habits = [
+            !!entry.wakeTime,
+            !!entry.prevCalories,
+            !!entry.prevSteps,
+            !!entry.supplementsAM,
+            !!entry.type,          // activity logged
+            !!entry.creatine,
+            !!entry.mobility,
+            !!entry.supplementsPM,
+            !!entry.bedTime,
+          ];
+          const done = habits.filter(Boolean).length;
+          const score = Math.round((done / habits.length) * 100);
+          const col = score===100?TEALL:score>=70?TEAL:T2;
+          return (
+            <div style={{background:SURFACE,border:`1px solid ${score===100?BORDERA:BORDER}`,borderRadius:14,padding:"14px 16px",marginBottom:18,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <div>
+                <div style={{fontSize:9,color:T3,letterSpacing:1.5,fontWeight:700,marginBottom:3}}>DAILY SCORE</div>
+                <div style={{fontSize:11,color:T3}}>{done}/{habits.length} habits complete</div>
+              </div>
+              <div style={{fontSize:38,fontWeight:900,color:col,letterSpacing:-2}}>{score}<span style={{fontSize:16,color:T3,fontWeight:600}}>%</span></div>
+            </div>
+          );
+        })()}
+
+        {/* ── HABIT BOXES — in order ── */}
+        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+
+          {/* 1. Wake up */}
           <HabitBox label="Wake-up time" value={entry.wakeTime||""} onChange={v=>updateEntry({wakeTime:v})} placeholder="e.g. 6:15am"/>
+
+          {/* 2. Prev day cals */}
           <HabitBox label="Previous day calories" value={entry.prevCalories||""} onChange={v=>updateEntry({prevCalories:v})} placeholder="e.g. 2400" type="number"/>
+
+          {/* 3. Prev day steps */}
           <HabitBox label="Previous day steps" value={entry.prevSteps||""} onChange={v=>updateEntry({prevSteps:v})} placeholder="e.g. 8500" type="number"/>
+
+          {/* 4. AM supps */}
+          <HabitBox label="Supplements AM" value={entry.supplementsAM||""} onChange={v=>updateEntry({supplementsAM:v})} placeholder="e.g. Vit D, Omega 3, Collagen"/>
+
         </div>
 
-        {/* Activity picker */}
+        {/* 5. Activity dropdown */}
         {(showActivityPicker||!entry.type)&&(
-          <div style={{background:"#111",border:`1px solid ${BORDERA}`,borderRadius:14,padding:16,marginBottom:16}}>
-            <div style={{fontSize:9,color:TEAL,fontWeight:700,letterSpacing:1.5,marginBottom:12}}>CHOOSE TODAY'S ACTIVITY</div>
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              <button onClick={()=>{ updateEntry({type:"workout",workoutKind:"upper",checked:{},payload:{},freeExercises:[],groupExercises:{},removedDefaultExercises:{}}); setShowActivityPicker(false); }}
-                style={{padding:"12px 14px",borderRadius:10,border:`1px solid ${BORDER}`,background:"transparent",color:T1,fontSize:14,fontWeight:600,cursor:"pointer",textAlign:"left"}}>Workout — Upper Body</button>
-              <button onClick={()=>{ updateEntry({type:"workout",workoutKind:"lower",checked:{},payload:{},freeExercises:[],groupExercises:{},removedDefaultExercises:{}}); setShowActivityPicker(false); }}
-                style={{padding:"12px 14px",borderRadius:10,border:`1px solid ${BORDER}`,background:"transparent",color:T1,fontSize:14,fontWeight:600,cursor:"pointer",textAlign:"left"}}>Workout — Lower Body</button>
-              {Object.entries(customWorkouts).map(([id,cw])=>(
-                <button key={id} onClick={()=>{ updateEntry({type:"custom",customWorkoutId:id,includeCali:cw.includeCali,checked:{},payload:{},freeExercises:[],groupExercises:{},removedDefaultExercises:{}}); setShowActivityPicker(false); }}
-                  style={{padding:"12px 14px",borderRadius:10,border:`1px solid ${BORDERA}`,background:"rgba(13,148,136,0.06)",color:TEALL,fontSize:14,fontWeight:600,cursor:"pointer",textAlign:"left"}}>
-                  {cw.name} <span style={{fontSize:10,color:T3,fontWeight:400}}>· custom</span>
-                </button>
-              ))}
-              <button onClick={()=>setShowCustomBuilder(true)} style={{padding:"12px 14px",borderRadius:10,border:`1px dashed ${BORDERA}`,background:"transparent",color:TEAL,fontSize:13,fontWeight:700,cursor:"pointer",textAlign:"left"}}>+ New Custom Workout</button>
-              <button onClick={()=>{ updateEntry({type:"run",checked:{},payload:{},freeExercises:[]}); setShowActivityPicker(false); }}
-                style={{padding:"12px 14px",borderRadius:10,border:`1px solid ${BORDER}`,background:"transparent",color:T1,fontSize:14,fontWeight:600,cursor:"pointer",textAlign:"left"}}>Run</button>
-              <button onClick={()=>{ updateEntry({type:"rest-full",completed:false,payload:{},freeExercises:[]}); setShowActivityPicker(false); }}
-                style={{padding:"12px 14px",borderRadius:10,border:`1px solid ${BORDER}`,background:"transparent",color:T1,fontSize:14,fontWeight:600,cursor:"pointer",textAlign:"left"}}>Rest</button>
-            </div>
+          <div style={{background:"#111",border:`1px solid ${BORDERA}`,borderRadius:14,padding:16,marginBottom:8}}>
+            <div style={{fontSize:9,color:TEAL,fontWeight:700,letterSpacing:1.5,marginBottom:10}}>TODAY'S ACTIVITY</div>
+            <select
+              defaultValue=""
+              onChange={e=>{
+                const val=e.target.value;
+                if(!val) return;
+                if(val==="upper"){ updateEntry({type:"workout",workoutKind:"upper",checked:{},payload:{},freeExercises:[],groupExercises:{},removedDefaultExercises:{}}); setShowActivityPicker(false); }
+                else if(val==="lower"){ updateEntry({type:"workout",workoutKind:"lower",checked:{},payload:{},freeExercises:[],groupExercises:{},removedDefaultExercises:{}}); setShowActivityPicker(false); }
+                else if(val==="run"){ updateEntry({type:"run",checked:{},payload:{},freeExercises:[]}); setShowActivityPicker(false); }
+                else if(val==="rest"){ updateEntry({type:"rest-full",completed:false,payload:{},freeExercises:[]}); setShowActivityPicker(false); }
+                else if(val==="new-custom"){ setShowCustomBuilder(true); }
+                else if(val.startsWith("cw_")){
+                  const cw=customWorkouts[val];
+                  if(cw) updateEntry({type:"custom",customWorkoutId:val,includeCali:cw.includeCali,checked:{},payload:{},freeExercises:[],groupExercises:{},removedDefaultExercises:{}});
+                  setShowActivityPicker(false);
+                }
+              }}
+              style={{width:"100%",padding:"12px 14px",borderRadius:10,border:`1px solid ${BORDER}`,background:"#1a1a1a",color:T1,fontSize:14,fontWeight:600,cursor:"pointer",appearance:"none",WebkitAppearance:"none"}}
+            >
+              <option value="" disabled>Select activity...</option>
+              <optgroup label="WORKOUT">
+                <option value="upper">Workout — Upper Body</option>
+                <option value="lower">Workout — Lower Body</option>
+              </optgroup>
+              {Object.keys(customWorkouts).length>0&&(
+                <optgroup label="CUSTOM WORKOUTS">
+                  {Object.entries(customWorkouts).map(([id,cw])=>(
+                    <option key={id} value={id}>{cw.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              <optgroup label="OTHER">
+                <option value="run">Run</option>
+                <option value="rest">Rest</option>
+                <option value="new-custom">+ New Custom Workout</option>
+              </optgroup>
+            </select>
           </div>
         )}
+
+        {!showActivityPicker&&entry.type&&(
+          <div style={{background:SURFACE,border:`1px solid ${BORDERA}`,borderRadius:10,padding:"10px 14px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:9,color:T3,letterSpacing:1,marginBottom:2}}>TODAY'S ACTIVITY</div>
+              <div style={{fontSize:13,fontWeight:700,color:TEALL}}>
+                {entry.type==="workout"?`Workout — ${entry.workoutKind==="upper"?"Upper":"Lower"} Body`
+                  :entry.type==="run"?"Run"
+                  :entry.type==="rest-full"?"Rest"
+                  :entry.type==="custom"?(customWorkouts[entry.customWorkoutId]?.name||"Custom Workout")
+                  :entry.type}
+              </div>
+            </div>
+            <button onClick={()=>setShowActivityPicker(true)} style={{background:"none",border:"none",color:T3,fontSize:10,cursor:"pointer",padding:0,fontWeight:600}}>↻ Change</button>
+          </div>
+        )}
+
+        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:18}}>
+
+          {/* 6. Creatine */}
+          <HabitBox label="Creatine consumed" value={entry.creatine||""} onChange={v=>updateEntry({creatine:v})} placeholder="e.g. 5g"/>
+
+          {/* 7. Mobility — tick only */}
+          <button onClick={()=>updateEntry({mobility:!entry.mobility})}
+            style={{width:"100%",textAlign:"left",background:entry.mobility?SURFACE:"rgba(255,255,255,0.03)",border:`1px solid ${entry.mobility?BORDERA:BORDER}`,borderRadius:10,padding:"12px 14px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",transition:"all 0.15s"}}>
+            <div>
+              <div style={{fontSize:9,color:T3,letterSpacing:1,marginBottom:2}}>MOBILITY</div>
+              <div style={{fontSize:14,fontWeight:600,color:entry.mobility?TEALL:T2}}>{entry.mobility?"Done":"Not yet"}</div>
+            </div>
+            <div style={{width:24,height:24,borderRadius:6,border:`1.5px solid ${entry.mobility?TEAL:T3}`,background:entry.mobility?TEAL:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all 0.15s"}}>
+              {entry.mobility&&<span style={{fontSize:13,color:"#fff",fontWeight:900}}>✓</span>}
+            </div>
+          </button>
+
+          {/* 8. PM supps */}
+          <HabitBox label="Supplements PM" value={entry.supplementsPM||""} onChange={v=>updateEntry({supplementsPM:v})} placeholder="e.g. Magnesium, Zinc"/>
+
+          {/* 9. Bed time */}
+          <HabitBox label="Bed time" value={entry.bedTime||""} onChange={v=>updateEntry({bedTime:v})} placeholder="e.g. 10:00pm"/>
+
+        </div>
 
         {showCustomBuilder&&(
           <CustomWorkoutBuilder onCancel={()=>setShowCustomBuilder(false)} recentCustomExercises={recentCustomExercises} onAddRecentExercise={onAddRecentExercise}
@@ -867,8 +971,6 @@ function DayScreen({iso,programStart,entries,onUpdateEntry,exHistory,onUpdateHis
 
         {!showActivityPicker&&entry.type&&(
           <>
-            <button onClick={()=>setShowActivityPicker(true)} style={{background:"none",border:"none",color:T3,fontSize:11,cursor:"pointer",marginBottom:14,padding:0,fontWeight:600}}>↻ Change activity</button>
-
             {(entry.type==="workout"||entry.type==="custom")&&<ProgressBar done={doneCount} total={itemKeys.length}/>}
 
             {entry.type==="rest-full"&&<RestDayInput payload={entry.payload||{}} onChangeField={setPayloadField}/>}
@@ -1038,32 +1140,73 @@ function ReviewScreen({entries}) {
   const workoutDays=allDates.filter(d=>entries[d]?.completed&&(entries[d].type==="workout"||entries[d].type==="custom")).length;
   const runDays=allDates.filter(d=>entries[d]?.completed&&entries[d].type==="run").length;
   const restDays=allDates.filter(d=>entries[d]?.completed&&(entries[d].type==="rest-full"||entries[d].type==="rest-active")).length;
+
+  // Daily scores across all logged days
+  const scoredDays = allDates.filter(d=>entries[d]?.completed).map(d=>{
+    const e=entries[d];
+    const habits=[!!e.wakeTime,!!e.prevCalories,!!e.prevSteps,!!e.supplementsAM,!!e.type,!!e.creatine,!!e.mobility,!!e.supplementsPM,!!e.bedTime];
+    return Math.round((habits.filter(Boolean).length/habits.length)*100);
+  });
+  const avgScore = scoredDays.length ? Math.round(scoredDays.reduce((a,b)=>a+b,0)/scoredDays.length) : null;
+  const perfect100 = scoredDays.filter(s=>s===100).length;
+
+  // 14-day score
+  const last14Scores = last14.map(iso=>{ const e=entries[iso]; if(!e?.completed) return null; const h=[!!e.wakeTime,!!e.prevCalories,!!e.prevSteps,!!e.supplementsAM,!!e.type,!!e.creatine,!!e.mobility,!!e.supplementsPM,!!e.bedTime]; return Math.round((h.filter(Boolean).length/h.length)*100); }).filter(s=>s!==null);
+  const avg14Score = last14Scores.length ? Math.round(last14Scores.reduce((a,b)=>a+b,0)/last14Scores.length) : null;
+
   return (
     <div style={{padding:"52px 20px 20px"}}>
       <div style={{fontSize:9,color:T3,letterSpacing:2.5,textTransform:"uppercase",marginBottom:6}}>Pillar Performance</div>
       <h1 style={{fontSize:24,fontWeight:900,margin:"0 0 24px",letterSpacing:-0.8,color:T1}}>Program Review</h1>
-      <div style={{background:SURFACE,border:`1px solid ${BORDER}`,borderRadius:14,padding:"16px",marginBottom:16}}>
-        <div style={{fontSize:9,color:TEAL,fontWeight:700,letterSpacing:1.5,marginBottom:14}}>14-DAY AVERAGES</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-          {[["Wake Time",avgWake||"—"],["Avg Steps",avgSteps?avgSteps.toLocaleString():"—"],["Avg Calories",avgCals?avgCals.toLocaleString():"—"]].map(([lbl,val])=>(
-            <div key={lbl} style={{background:"rgba(13,148,136,0.06)",borderRadius:10,padding:"12px 10px"}}>
-              <div style={{fontSize:8,color:T3,marginBottom:5}}>{lbl.toUpperCase()}</div>
-              <div style={{fontSize:16,fontWeight:900,color:val==="—"?T3:TEALL}}>{val}</div>
+
+      {/* Daily score summary */}
+      <div style={{position:"relative",background:"linear-gradient(155deg,rgba(13,148,136,0.2),rgba(13,148,136,0.04))",border:`1px solid ${BORDERA}`,borderRadius:18,padding:"24px 20px",marginBottom:16,overflow:"hidden"}}>
+        <div style={{position:"absolute",top:-40,right:-40,width:140,height:140,borderRadius:"50%",background:"rgba(45,212,191,0.12)",filter:"blur(30px)"}}/>
+        <div style={{fontSize:9,color:TEAL,fontWeight:700,letterSpacing:2,marginBottom:6}}>DAILY HABIT SCORE</div>
+        <div style={{display:"flex",alignItems:"flex-end",gap:12,marginBottom:18}}>
+          <div style={{fontSize:52,fontWeight:900,color:TEALL,letterSpacing:-2,lineHeight:1}}>
+            {avgScore!==null?`${avgScore}%`:"—"}
+          </div>
+          <div style={{paddingBottom:6}}>
+            <div style={{fontSize:11,color:T2,fontWeight:600}}>lifetime average</div>
+            {avg14Score!==null&&<div style={{fontSize:11,color:T3}}>{avg14Score}% last 14 days</div>}
+          </div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+          {[
+            {label:"Days Logged", val:totalDays, col:T1},
+            {label:"Perfect Days", val:perfect100, col:TEALL},
+            {label:"Days Tracked", val:scoredDays.length, col:T2},
+          ].map(s=>(
+            <div key={s.label} style={{textAlign:"center"}}>
+              <div style={{fontSize:28,fontWeight:900,color:s.col,lineHeight:1}}>{s.val}</div>
+              <div style={{fontSize:8,color:T3,letterSpacing:0.8,marginTop:4}}>{s.label.toUpperCase()}</div>
             </div>
           ))}
         </div>
       </div>
-      <div style={{position:"relative",background:"linear-gradient(155deg,rgba(13,148,136,0.18),rgba(13,148,136,0.03))",border:`1px solid ${BORDERA}`,borderRadius:18,padding:"24px 20px",marginBottom:16,overflow:"hidden"}}>
-        <div style={{position:"absolute",top:-40,right:-40,width:140,height:140,borderRadius:"50%",background:"rgba(45,212,191,0.12)",filter:"blur(30px)"}}/>
-        <div style={{fontSize:9,color:TEAL,fontWeight:700,letterSpacing:2,marginBottom:4}}>SINCE YOU STARTED</div>
-        <div style={{fontSize:48,fontWeight:900,color:T1,letterSpacing:-2,lineHeight:1,marginBottom:18}}>
-          {totalDays}<span style={{fontSize:16,color:T2,fontWeight:600,marginLeft:8}}>total days logged</span>
-        </div>
+
+      {/* Activity breakdown */}
+      <div style={{background:SURFACE,border:`1px solid ${BORDER}`,borderRadius:14,padding:"16px",marginBottom:16}}>
+        <div style={{fontSize:9,color:TEAL,fontWeight:700,letterSpacing:1.5,marginBottom:14}}>ACTIVITY BREAKDOWN</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
           {[{label:"Workout",val:workoutDays,col:TEALL},{label:"Run",val:runDays,col:"#a78bfa"},{label:"Rest",val:restDays,col:"#ffffff"}].map(s=>(
-            <div key={s.label} style={{textAlign:"center"}}>
+            <div key={s.label} style={{textAlign:"center",background:"rgba(13,148,136,0.06)",borderRadius:10,padding:"12px 8px"}}>
               <div style={{fontSize:28,fontWeight:900,color:s.col,lineHeight:1}}>{s.val}</div>
-              <div style={{fontSize:9,color:T2,letterSpacing:1,marginTop:4}}>{s.label.toUpperCase()} DAYS</div>
+              <div style={{fontSize:8,color:T2,letterSpacing:1,marginTop:4}}>{s.label.toUpperCase()}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 14-day averages */}
+      <div style={{background:SURFACE,border:`1px solid ${BORDER}`,borderRadius:14,padding:"16px",marginBottom:16}}>
+        <div style={{fontSize:9,color:TEAL,fontWeight:700,letterSpacing:1.5,marginBottom:14}}>14-DAY AVERAGES</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+          {[["Wake Time",avgWake||"—"],["Steps",avgSteps?avgSteps.toLocaleString():"—"],["Calories",avgCals?avgCals.toLocaleString():"—"]].map(([lbl,val])=>(
+            <div key={lbl} style={{background:"rgba(13,148,136,0.06)",borderRadius:10,padding:"12px 10px"}}>
+              <div style={{fontSize:8,color:T3,marginBottom:5}}>{lbl.toUpperCase()}</div>
+              <div style={{fontSize:15,fontWeight:900,color:val==="—"?T3:TEALL}}>{val}</div>
             </div>
           ))}
         </div>
@@ -1075,6 +1218,25 @@ function ReviewScreen({entries}) {
 /* ═══════════════════════════════════════════════════════════
    MAIN APP
 ═══════════════════════════════════════════════════════════ */
+
+/* ═══ ERROR BOUNDARY ═══ */
+class ErrorBoundary extends React.Component {
+  constructor(props){super(props);this.state={hasError:false};}
+  static getDerivedStateFromError(){return{hasError:true};}
+  componentDidCatch(e,info){console.error("Pillar error:",e,info);}
+  render(){
+    if(this.state.hasError) return(
+      <div style={{minHeight:"100vh",background:"#0a0a0a",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:32,fontFamily:"-apple-system,sans-serif"}}>
+        <div style={{fontSize:36,marginBottom:16}}>⚠️</div>
+        <h2 style={{color:"#fff",fontSize:20,fontWeight:800,margin:"0 0 10px"}}>Something went wrong</h2>
+        <p style={{color:"#94a3b8",fontSize:13,textAlign:"center",lineHeight:1.6,marginBottom:28,maxWidth:280}}>The app hit an unexpected error. Tap below to reload.</p>
+        <button onClick={()=>window.location.reload()} style={{padding:"12px 28px",borderRadius:10,border:"none",background:"#0d9488",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",marginBottom:10}}>Reload App</button>
+        <button onClick={()=>{try{localStorage.removeItem("pillar_performance_v1");}catch{}window.location.reload();}} style={{padding:"10px 28px",borderRadius:10,border:"1px solid rgba(13,148,136,0.3)",background:"transparent",color:"#3a4854",fontSize:12,fontWeight:600,cursor:"pointer"}}>Reset data and reload</button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
 
 export default function App() {
   const {state,update,loaded}=useAppStorage();
@@ -1133,5 +1295,6 @@ export default function App() {
         </div>
       )}
     </div>
+    </ErrorBoundary>
   );
 }
